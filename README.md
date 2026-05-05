@@ -1,36 +1,31 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 🍔 Tilla Burger — POS Kassa Tizimi
 
-## Getting Started
+Web-based kassa (POS) tizimi. Touch/klik orqali ishlatiladi.
 
-First, run the development server:
+## Xususiyatlar
+
+- 7 ta kategoriya: Pizza, Lavash, Hot Dog, Burger, Chicken, Fries, Drinks
+- Buyurtmani savatchaga qo'shish, miqdorni o'zgartirish
+- 3 xil to'lov usuli: Naqd, Karta, Hisob (Transfer)
+- Kunlik hisobot: jami tushum, to'lov usullari, top taomlar
+- Barcha buyurtmalar brauzer xotirasida saqlanadi (localStorage)
+
+## Ishga tushirish
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Brauzerda: http://localhost:3000
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Railway deploy
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+1. GitHub repozitoriyasiga push qiling
+2. Railway.app da yangi loyiha yarating
+3. GitHub reponi ulang
+4. Railway avtomatik deploy qiladi
 
-## Learn More
+## Narxlarni o'zgartirish
 
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+[lib/menu.ts](lib/menu.ts) faylida `price` qiymatlarini tahrirlang.
