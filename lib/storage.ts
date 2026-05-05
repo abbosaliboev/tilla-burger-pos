@@ -29,5 +29,5 @@ export function getTodayOrders(): Order[] {
 }
 
 export function formatPrice(amount: number): string {
-  return amount.toLocaleString('uz-UZ') + " so'm";
+  return '₩' + amount.toLocaleString('ko-KR');
 }

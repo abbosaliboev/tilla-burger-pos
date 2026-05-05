@@ -8,7 +8,7 @@ import Link from 'next/link';
 const methodLabel: Record<PaymentMethod, string> = {
   cash: '💵 Naqd',
   card: '💳 Karta',
-  transfer: '📲 Hisob',
+  transfer: '📲 Transfer',
 };
 
 const methodColor: Record<PaymentMethod, string> = {
@@ -24,12 +24,18 @@ export default function ReportsPage() {
 
   useEffect(() => {
     const all = getOrders();
-    const dates = [...new Set(all.map((o) => o.date))].sort((a, b) => b.localeCompare(a));
+    const today = new Date().toISOString().split('T')[0];
+    const dateSet = new Set(all.map((o) => o.date));
+    dateSet.add(today); // bugun har doim ko'rinsin
+    const dates = [...dateSet].sort((a, b) => b.localeCompare(a));
     setAllDates(dates);
     setOrders(all.filter((o) => o.date === selectedDate));
   }, [selectedDate]);
 
   const total = orders.reduce((s, o) => s + o.total, 0);
+  const dineInTotal = orders.filter((o) => o.orderType === 'dine-in').reduce((s, o) => s + o.total, 0);
+  const takeoutTotal = orders.filter((o) => o.orderType === 'takeout').reduce((s, o) => s + o.total, 0);
+
   const byMethod = orders.reduce(
     (acc, o) => {
       acc[o.paymentMethod] = (acc[o.paymentMethod] || 0) + o.total;
@@ -51,7 +57,11 @@ export default function ReportsPage() {
   };
 
   const formatDate = (d: string) =>
-    new Date(d).toLocaleDateString('uz-UZ', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    new Date(d + 'T00:00:00').toLocaleDateString('ko-KR', {
+      day: '2-digit', month: '2-digit', year: 'numeric',
+    });
+
+  const isToday = (d: string) => d === new Date().toISOString().split('T')[0];
 
   return (
     <div className="flex flex-col min-h-screen bg-gray-950 text-white">
@@ -64,7 +74,13 @@ export default function ReportsPage() {
           >
             ← Kassa
           </Link>
-          <span className="font-bold text-lg">📊 Kunlik Hisobot</span>
+          <div>
+            <span className="font-bold text-lg">📊 Kunlik Hisobot</span>
+            <p className="text-xs text-gray-500 mt-0.5">
+              {isToday(selectedDate) ? '📅 Bugun' : formatDate(selectedDate)}
+              {orders.length > 0 && <span className="ml-2 text-amber-400 font-bold">{formatPrice(total)}</span>}
+            </p>
+          </div>
         </div>
       </header>
 
@@ -87,7 +103,7 @@ export default function ReportsPage() {
                         : 'bg-gray-800 hover:bg-gray-700 text-gray-300'
                     }`}
                   >
-                    {d === new Date().toISOString().split('T')[0] ? '📅 Bugun' : formatDate(d)}
+                    {isToday(d) ? '📅 Bugun' : formatDate(d)}
                   </button>
                 ))
               )}
@@ -106,7 +122,7 @@ export default function ReportsPage() {
             <div className="max-w-4xl mx-auto space-y-4">
               {/* Summary cards */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div className="bg-gray-900 rounded-2xl p-4 border border-gray-800">
+                <div className="bg-gray-900 rounded-2xl p-4 border border-gray-800 col-span-2 sm:col-span-1">
                   <p className="text-gray-400 text-xs mb-1">Jami tushum</p>
                   <p className="text-amber-400 font-bold text-xl">{formatPrice(total)}</p>
                 </div>
@@ -115,14 +131,14 @@ export default function ReportsPage() {
                   <p className="text-white font-bold text-xl">{orders.length} ta</p>
                 </div>
                 <div className="bg-gray-900 rounded-2xl p-4 border border-gray-800">
-                  <p className="text-gray-400 text-xs mb-1">O&apos;rtacha check</p>
-                  <p className="text-green-400 font-bold text-xl">
-                    {formatPrice(Math.round(total / orders.length))}
-                  </p>
+                  <p className="text-gray-400 text-xs mb-1">🪑 Dine-in</p>
+                  <p className="text-green-400 font-bold text-base">{formatPrice(dineInTotal)}</p>
+                  <p className="text-gray-500 text-xs">{orders.filter((o) => o.orderType === 'dine-in').length} ta</p>
                 </div>
                 <div className="bg-gray-900 rounded-2xl p-4 border border-gray-800">
-                  <p className="text-gray-400 text-xs mb-1">Sana</p>
-                  <p className="text-blue-400 font-bold text-base">{formatDate(selectedDate)}</p>
+                  <p className="text-gray-400 text-xs mb-1">🛍️ Takeout</p>
+                  <p className="text-blue-400 font-bold text-base">{formatPrice(takeoutTotal)}</p>
+                  <p className="text-gray-500 text-xs">{orders.filter((o) => o.orderType === 'takeout').length} ta</p>
                 </div>
               </div>
 
@@ -133,11 +149,11 @@ export default function ReportsPage() {
                   {(['cash', 'card', 'transfer'] as PaymentMethod[]).map((m) => (
                     <div key={m} className="bg-gray-800 rounded-xl p-3 text-center">
                       <p className="text-gray-400 text-xs mb-1">{methodLabel[m]}</p>
-                      <p className={`font-bold text-lg ${methodColor[m]}`}>
-                        {byMethod[m] ? byMethod[m].toLocaleString('uz-UZ') : '0'}
+                      <p className={`font-bold text-base ${methodColor[m]}`}>
+                        {byMethod[m] ? formatPrice(byMethod[m]) : '₩0'}
                       </p>
                       <p className="text-gray-500 text-xs">
-                        {orders.filter((o) => o.paymentMethod === m).length} ta buyurtma
+                        {orders.filter((o) => o.paymentMethod === m).length} ta
                       </p>
                     </div>
                   ))}
@@ -150,11 +166,14 @@ export default function ReportsPage() {
                   <h3 className="font-bold mb-3 text-gray-300">Ko&apos;p sotilgan taomlar</h3>
                   <div className="space-y-2">
                     {topItems().map((item, i) => (
-                      <div key={item.name} className="flex items-center gap-3 py-2 border-b border-gray-800 last:border-0">
-                        <span className="text-gray-500 text-sm w-5 text-center">{i + 1}</span>
+                      <div
+                        key={item.name}
+                        className="flex items-center gap-3 py-2 border-b border-gray-800 last:border-0"
+                      >
+                        <span className="text-gray-500 text-sm w-5 text-center font-bold">{i + 1}</span>
                         <span className="flex-1 font-medium">{item.name}</span>
                         <span className="text-amber-400 font-bold text-sm">{item.qty} ta</span>
-                        <span className="text-gray-400 text-sm">{item.revenue.toLocaleString('uz-UZ')}</span>
+                        <span className="text-gray-400 text-sm">{formatPrice(item.revenue)}</span>
                       </div>
                     ))}
                   </div>
@@ -170,12 +189,23 @@ export default function ReportsPage() {
                   {[...orders].reverse().map((order) => (
                     <div key={order.id} className="bg-gray-800 rounded-xl p-3">
                       <div className="flex items-center justify-between mb-2">
-                        <span className="text-gray-400 text-xs">
-                          {new Date(order.timestamp).toLocaleTimeString('uz-UZ', {
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-gray-400 text-xs">
+                            {new Date(order.timestamp).toLocaleTimeString('ko-KR', {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
+                          </span>
+                          <span
+                            className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                              order.orderType === 'takeout'
+                                ? 'bg-blue-500/20 text-blue-400'
+                                : 'bg-green-500/20 text-green-400'
+                            }`}
+                          >
+                            {order.tableName}
+                          </span>
+                        </div>
                         <div className="flex items-center gap-2">
                           <span className={`text-xs font-medium ${methodColor[order.paymentMethod]}`}>
                             {methodLabel[order.paymentMethod]}

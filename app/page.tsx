@@ -1,14 +1,34 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { categories, menuItems } from '@/lib/menu';
-import { CartItem, MenuItem, Order, PaymentMethod } from '@/lib/types';
+import { CartItem, MenuItem, Order, PaymentMethod, TableSession } from '@/lib/types';
 import { saveOrder, formatPrice } from '@/lib/storage';
 import Link from 'next/link';
 
+const TABLE_COUNT = 5;
+
+function initTables(): TableSession[] {
+  const tables: TableSession[] = Array.from({ length: TABLE_COUNT }, (_, i) => ({
+    id: `table-${i + 1}`,
+    name: `Stol ${i + 1}`,
+    type: 'dine-in',
+    cart: [],
+  }));
+  tables.push({ id: 'takeout', name: '🛍️ Takeout', type: 'takeout', cart: [] });
+  return tables;
+}
+
+const methodLabel: Record<PaymentMethod, string> = {
+  cash: '💵 Naqd pul',
+  card: '💳 Karta',
+  transfer: '📲 Transfer',
+};
+
 export default function POSPage() {
   const [activeCategory, setActiveCategory] = useState('pizza');
-  const [cart, setCart] = useState<CartItem[]>([]);
+  const [tables, setTables] = useState<TableSession[]>(initTables);
+  const [activeTableId, setActiveTableId] = useState('takeout');
   const [showPayment, setShowPayment] = useState(false);
   const [showReceipt, setShowReceipt] = useState(false);
   const [lastOrder, setLastOrder] = useState<Order | null>(null);
@@ -18,9 +38,9 @@ export default function POSPage() {
     const tick = () => {
       const now = new Date();
       setCurrentTime(
-        now.toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit' }) +
+        now.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }) +
           ' · ' +
-          now.toLocaleDateString('uz-UZ', { day: '2-digit', month: '2-digit', year: 'numeric' })
+          now.toLocaleDateString('ko-KR', { day: '2-digit', month: '2-digit', year: 'numeric' })
       );
     };
     tick();
@@ -28,37 +48,72 @@ export default function POSPage() {
     return () => clearInterval(interval);
   }, []);
 
+  const activeTable = tables.find((t) => t.id === activeTableId)!;
+  const cart = activeTable.cart;
   const filteredItems = menuItems.filter((item) => item.category === activeCategory);
+  const total = cart.reduce((sum, c) => sum + c.item.price * c.quantity, 0);
+  const cartCount = cart.reduce((sum, c) => sum + c.quantity, 0);
+
+  const updateTableCart = useCallback(
+    (tableId: string, updater: (cart: CartItem[]) => CartItem[]) => {
+      setTables((prev) =>
+        prev.map((t) =>
+          t.id === tableId
+            ? {
+                ...t,
+                cart: updater(t.cart),
+                openedAt: t.cart.length === 0 && updater(t.cart).length > 0
+                  ? new Date().toISOString()
+                  : t.openedAt,
+              }
+            : t
+        )
+      );
+    },
+    []
+  );
 
   const addToCart = (item: MenuItem) => {
-    setCart((prev) => {
+    updateTableCart(activeTableId, (prev) => {
       const existing = prev.find((c) => c.item.id === item.id);
       if (existing) {
         return prev.map((c) => (c.item.id === item.id ? { ...c, quantity: c.quantity + 1 } : c));
       }
       return [...prev, { item, quantity: 1 }];
     });
+    // Set openedAt on first item
+    setTables((prev) =>
+      prev.map((t) =>
+        t.id === activeTableId && t.cart.length === 0 && !t.openedAt
+          ? { ...t, openedAt: new Date().toISOString() }
+          : t
+      )
+    );
   };
 
   const changeQty = (itemId: string, delta: number) => {
-    setCart((prev) =>
+    updateTableCart(activeTableId, (prev) =>
       prev
         .map((c) => (c.item.id === itemId ? { ...c, quantity: c.quantity + delta } : c))
         .filter((c) => c.quantity > 0)
     );
   };
 
-  const removeFromCart = (itemId: string) => {
-    setCart((prev) => prev.filter((c) => c.item.id !== itemId));
+  const clearTable = (tableId: string) => {
+    setTables((prev) =>
+      prev.map((t) =>
+        t.id === tableId ? { ...t, cart: [], openedAt: undefined } : t
+      )
+    );
   };
-
-  const total = cart.reduce((sum, c) => sum + c.item.price * c.quantity, 0);
-  const cartCount = cart.reduce((sum, c) => sum + c.quantity, 0);
 
   const confirmPayment = (method: PaymentMethod) => {
     const now = new Date();
     const order: Order = {
       id: Date.now().toString(),
+      tableId: activeTable.id,
+      tableName: activeTable.name,
+      orderType: activeTable.type,
       items: cart,
       subtotal: total,
       total,
@@ -68,16 +123,16 @@ export default function POSPage() {
     };
     saveOrder(order);
     setLastOrder(order);
-    setCart([]);
+    clearTable(activeTableId);
     setShowPayment(false);
     setShowReceipt(true);
   };
 
-  const methodLabel: Record<PaymentMethod, string> = {
-    cash: '💵 Naqd pul',
-    card: '💳 Karta',
-    transfer: '📲 Hisob (Transfer)',
-  };
+  const tableTotal = (t: TableSession) =>
+    t.cart.reduce((s, c) => s + c.item.price * c.quantity, 0);
+
+  const tableItemCount = (t: TableSession) =>
+    t.cart.reduce((s, c) => s + c.quantity, 0);
 
   return (
     <div className="flex flex-col h-screen bg-gray-950 text-white overflow-hidden">
@@ -85,7 +140,7 @@ export default function POSPage() {
       <header className="flex items-center justify-between px-4 py-3 bg-gray-900 border-b border-gray-800 shrink-0">
         <div className="flex items-center gap-3">
           <span className="text-2xl font-bold text-amber-400">🍔 Tilla Burger</span>
-          <span className="text-gray-400 text-sm">{currentTime}</span>
+          <span className="text-gray-500 text-sm">{currentTime}</span>
         </div>
         <Link
           href="/reports"
@@ -143,7 +198,7 @@ export default function POSPage() {
                       {item.name}
                     </span>
                     <span className="text-amber-400 font-bold text-sm">
-                      {item.price.toLocaleString('uz-UZ')}
+                      {formatPrice(item.price)}
                     </span>
                   </button>
                 );
@@ -152,25 +207,83 @@ export default function POSPage() {
           </div>
         </div>
 
-        {/* RIGHT: Cart */}
+        {/* RIGHT: Tables + Cart */}
         <div className="flex flex-col w-80 lg:w-96 bg-gray-900 shrink-0">
-          <div className="px-4 py-3 border-b border-gray-800 shrink-0">
-            <h2 className="font-bold text-lg">
-              🛒 Buyurtma{' '}
-              {cartCount > 0 && (
-                <span className="text-amber-400">({cartCount} ta)</span>
-              )}
-            </h2>
+          {/* Tab header */}
+          <div className="shrink-0 border-b border-gray-800 p-2 space-y-2">
+
+            {/* Takeout — katta, birinchi */}
+            {(() => {
+              const t = tables.find((x) => x.id === 'takeout')!;
+              const isActive = activeTableId === 'takeout';
+              const hasItems = t.cart.length > 0;
+              return (
+                <button
+                  onClick={() => setActiveTableId('takeout')}
+                  className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 font-bold transition-all ${
+                    isActive
+                      ? 'bg-blue-500 border-blue-400 text-white shadow-lg shadow-blue-500/30'
+                      : hasItems
+                      ? 'bg-blue-500/15 border-blue-500 text-blue-300'
+                      : 'bg-gray-800 border-gray-700 text-gray-300 hover:bg-gray-700 hover:border-blue-500/50'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-2xl">🛍️</span>
+                    <span className="text-base">Takeout</span>
+                  </div>
+                  {hasItems ? (
+                    <span className={`text-sm font-bold ${isActive ? 'text-white' : 'text-blue-300'}`}>
+                      {tableItemCount(t)} ta · {formatPrice(tableTotal(t))}
+                    </span>
+                  ) : (
+                    <span className="text-xs text-gray-500">Bo&apos;sh</span>
+                  )}
+                </button>
+              );
+            })()}
+
+            {/* Dine-in stollar — kichik qator */}
+            <div className="flex gap-1.5 overflow-x-auto">
+              {tables
+                .filter((t) => t.type === 'dine-in')
+                .map((t) => {
+                  const hasItems = t.cart.length > 0;
+                  const isActive = t.id === activeTableId;
+                  return (
+                    <button
+                      key={t.id}
+                      onClick={() => setActiveTableId(t.id)}
+                      className={`relative flex flex-col items-center justify-center px-3 py-2 rounded-xl transition-all shrink-0 min-w-[58px] border-2 ${
+                        isActive
+                          ? 'bg-amber-500 border-amber-400 text-gray-950'
+                          : hasItems
+                          ? 'bg-green-500/15 border-green-500 text-green-400'
+                          : 'bg-gray-800 border-gray-700 text-gray-400 hover:bg-gray-700'
+                      }`}
+                    >
+                      <span className="text-base">🪑</span>
+                      <span className="text-xs font-bold whitespace-nowrap">{t.name}</span>
+                      {hasItems && !isActive && (
+                        <span className="text-[10px] font-bold text-green-300">
+                          {tableItemCount(t)} ta
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+            </div>
+
           </div>
 
           {/* Cart items */}
           <div className="flex-1 overflow-y-auto">
             {cart.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-gray-500 gap-3">
-                <span className="text-6xl">🛒</span>
-                <span className="text-base">Buyurtma bo&apos;sh</span>
+                <span className="text-6xl">{activeTable.type === 'takeout' ? '🛍️' : '🪑'}</span>
+                <span className="text-base font-semibold text-gray-400">{activeTable.name} — bo&apos;sh</span>
                 <span className="text-sm text-center px-6 text-gray-600">
-                  Menyu tugmalariga bosib qo&apos;shing
+                  Chap tomondan mahsulot tanlang
                 </span>
               </div>
             ) : (
@@ -183,9 +296,9 @@ export default function POSPage() {
                     <div className="flex-1 min-w-0">
                       <div className="font-medium text-sm truncate">{cartItem.item.name}</div>
                       <div className="text-amber-400 text-xs mt-0.5">
-                        {cartItem.item.price.toLocaleString('uz-UZ')} × {cartItem.quantity} ={' '}
+                        {formatPrice(cartItem.item.price)} × {cartItem.quantity} ={' '}
                         <span className="font-bold">
-                          {(cartItem.item.price * cartItem.quantity).toLocaleString('uz-UZ')}
+                          {formatPrice(cartItem.item.price * cartItem.quantity)}
                         </span>
                       </div>
                     </div>
@@ -205,7 +318,7 @@ export default function POSPage() {
                       </button>
                     </div>
                     <button
-                      onClick={() => removeFromCart(cartItem.item.id)}
+                      onClick={() => changeQty(cartItem.item.id, -cartItem.quantity)}
                       className="w-8 h-8 rounded-lg bg-gray-700 hover:bg-red-600 flex items-center justify-center text-gray-400 hover:text-white transition-colors shrink-0 text-sm"
                     >
                       ✕
@@ -224,7 +337,7 @@ export default function POSPage() {
             </div>
             <div className="flex gap-2">
               <button
-                onClick={() => setCart([])}
+                onClick={() => clearTable(activeTableId)}
                 disabled={cart.length === 0}
                 className="px-4 py-4 rounded-xl bg-gray-700 hover:bg-gray-600 disabled:opacity-30 disabled:cursor-not-allowed font-semibold transition-colors text-sm"
               >
@@ -233,7 +346,11 @@ export default function POSPage() {
               <button
                 onClick={() => setShowPayment(true)}
                 disabled={cart.length === 0}
-                className="flex-1 py-4 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-30 disabled:cursor-not-allowed font-bold text-gray-950 text-lg transition-colors"
+                className={`flex-1 py-4 rounded-xl font-bold text-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed ${
+                  activeTable.type === 'takeout'
+                    ? 'bg-blue-500 hover:bg-blue-400 text-white'
+                    : 'bg-amber-500 hover:bg-amber-400 text-gray-950'
+                }`}
               >
                 To&apos;lash →
               </button>
@@ -242,26 +359,52 @@ export default function POSPage() {
         </div>
       </div>
 
+      {/* Occupied tables overview bar */}
+      {tables.some((t) => t.cart.length > 0) && (
+        <div className="shrink-0 bg-gray-900 border-t border-gray-800 px-4 py-2 flex gap-3 overflow-x-auto">
+          <span className="text-gray-500 text-xs shrink-0 self-center">Faol:</span>
+          {tables
+            .filter((t) => t.cart.length > 0)
+            .map((t) => (
+              <button
+                key={t.id}
+                onClick={() => setActiveTableId(t.id)}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium shrink-0 transition-colors ${
+                  t.id === activeTableId
+                    ? 'bg-amber-500 text-gray-950'
+                    : t.type === 'takeout'
+                    ? 'bg-blue-500/20 text-blue-400 border border-blue-500/40'
+                    : 'bg-green-500/20 text-green-400 border border-green-500/40'
+                }`}
+              >
+                <span>{t.name}</span>
+                <span className="font-bold">{formatPrice(tableTotal(t))}</span>
+              </button>
+            ))}
+        </div>
+      )}
+
       {/* Payment Modal */}
       {showPayment && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-gray-900 rounded-3xl p-6 w-full max-w-sm border border-gray-700 shadow-2xl">
-            <h3 className="text-xl font-bold mb-1 text-center">To&apos;lov usulini tanlang</h3>
+            <div className="text-center mb-1">
+              <p className="text-gray-400 text-sm">{activeTable.name}</p>
+              <h3 className="text-xl font-bold">To&apos;lov usulini tanlang</h3>
+            </div>
             <div className="text-center text-amber-400 text-3xl font-bold mb-6">
               {formatPrice(total)}
             </div>
             <div className="flex flex-col gap-3 mb-5">
-              {(Object.entries(methodLabel) as [PaymentMethod, string][]).map(
-                ([method, label]) => (
-                  <button
-                    key={method}
-                    onClick={() => confirmPayment(method)}
-                    className="py-5 rounded-2xl bg-gray-800 hover:bg-amber-500 hover:text-gray-950 font-bold text-xl transition-all active:scale-95 border-2 border-gray-700 hover:border-amber-500"
-                  >
-                    {label}
-                  </button>
-                )
-              )}
+              {(Object.entries(methodLabel) as [PaymentMethod, string][]).map(([method, label]) => (
+                <button
+                  key={method}
+                  onClick={() => confirmPayment(method)}
+                  className="py-5 rounded-2xl bg-gray-800 hover:bg-amber-500 hover:text-gray-950 font-bold text-xl transition-all active:scale-95 border-2 border-gray-700 hover:border-amber-500"
+                >
+                  {label}
+                </button>
+              ))}
             </div>
             <button
               onClick={() => setShowPayment(false)}
@@ -279,9 +422,9 @@ export default function POSPage() {
           <div className="bg-gray-900 rounded-3xl p-6 w-full max-w-sm border border-gray-700 shadow-2xl">
             <div className="text-center mb-5">
               <div className="text-5xl mb-2">✅</div>
-              <h3 className="text-xl font-bold text-green-400">Buyurtma qabul qilindi!</h3>
+              <h3 className="text-xl font-bold text-green-400">To&apos;lov qabul qilindi!</h3>
               <p className="text-gray-400 text-sm mt-1">
-                {methodLabel[lastOrder.paymentMethod]}
+                {lastOrder.tableName} · {methodLabel[lastOrder.paymentMethod]}
               </p>
             </div>
             <div className="bg-gray-800 rounded-2xl p-4 mb-4 space-y-2 max-h-48 overflow-y-auto">
@@ -291,7 +434,7 @@ export default function POSPage() {
                     {ci.item.name} × {ci.quantity}
                   </span>
                   <span className="text-amber-400 font-medium">
-                    {(ci.item.price * ci.quantity).toLocaleString('uz-UZ')}
+                    {formatPrice(ci.item.price * ci.quantity)}
                   </span>
                 </div>
               ))}
@@ -304,7 +447,7 @@ export default function POSPage() {
               onClick={() => setShowReceipt(false)}
               className="w-full py-4 rounded-xl bg-amber-500 hover:bg-amber-400 text-gray-950 font-bold text-lg transition-colors"
             >
-              Yangi buyurtma
+              OK
             </button>
           </div>
         </div>
