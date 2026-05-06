@@ -186,12 +186,12 @@ export default function POSPage() {
         {/* LEFT: Menu */}
         <div className="flex flex-col flex-1 overflow-hidden border-r border-gray-800">
           {/* Category tabs */}
-          <div className="flex gap-2 p-3 bg-gray-900 overflow-x-auto shrink-0">
+          <div className="flex flex-wrap gap-2 p-3 bg-gray-900 shrink-0">
             {categories.map((cat) => (
               <button
                 key={cat.id}
                 onClick={() => setActiveCategory(cat.id)}
-                className={`flex items-center gap-1.5 px-4 py-3 rounded-xl font-semibold text-sm whitespace-nowrap transition-all shrink-0 ${
+                className={`flex items-center gap-1.5 px-4 py-3 rounded-xl font-semibold text-sm transition-all ${
                   activeCategory === cat.id
                     ? 'bg-amber-500 text-gray-950 shadow-lg scale-105'
                     : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
@@ -205,14 +205,14 @@ export default function POSPage() {
 
           {/* Menu items grid */}
           <div className="flex-1 overflow-y-auto p-3">
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+            <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-4 gap-2">
               {filteredItems.map((item) => {
                 const inCart = cart.find((c) => c.item.id === item.id);
                 return (
                   <button
                     key={item.id}
                     onClick={() => addToCart(item)}
-                    className={`relative flex flex-col items-center justify-center p-4 rounded-2xl border-2 transition-all min-h-[120px] active:scale-95 ${
+                    className={`relative flex flex-col items-center justify-center p-3 rounded-2xl border-2 transition-all min-h-[100px] active:scale-95 ${
                       inCart
                         ? 'bg-amber-500/20 border-amber-500 shadow-amber-500/20 shadow-lg'
                         : 'bg-gray-800 border-gray-700 hover:border-gray-500 hover:bg-gray-700'
@@ -223,13 +223,13 @@ export default function POSPage() {
                         {inCart.quantity}
                       </span>
                     )}
-                    <span className="text-4xl mb-2">
+                    <span className="text-3xl mb-1">
                       {categories.find((c) => c.id === item.category)?.emoji}
                     </span>
-                    <span className="font-semibold text-sm text-center leading-tight mb-1 px-1">
+                    <span className="font-semibold text-xs text-center leading-tight mb-1 px-1">
                       {item.name}
                     </span>
-                    <span className="text-amber-400 font-bold text-sm">
+                    <span className="text-amber-400 font-bold text-xs">
                       {formatPrice(item.price)}
                     </span>
                   </button>
