@@ -7,16 +7,42 @@ import { saveOrder, formatPrice } from '@/lib/storage';
 import Link from 'next/link';
 
 const TABLE_COUNT = 5;
+const TAKEOUT_COUNT = 3;
+const SESSIONS_KEY = 'tilla_burger_sessions';
+const ACTIVE_TABLE_KEY = 'tilla_burger_active_table';
 
-function initTables(): TableSession[] {
+function defaultTables(): TableSession[] {
   const tables: TableSession[] = Array.from({ length: TABLE_COUNT }, (_, i) => ({
     id: `table-${i + 1}`,
     name: `Stol ${i + 1}`,
     type: 'dine-in',
     cart: [],
   }));
-  tables.push({ id: 'takeout', name: '🛍️ Takeout', type: 'takeout', cart: [] });
+  for (let i = 1; i <= TAKEOUT_COUNT; i++) {
+    tables.push({ id: `takeout-${i}`, name: `Takeout ${i}`, type: 'takeout', cart: [] });
+  }
   return tables;
+}
+
+function loadTables(): TableSession[] {
+  if (typeof window === 'undefined') return defaultTables();
+  try {
+    const raw = localStorage.getItem(SESSIONS_KEY);
+    if (!raw) return defaultTables();
+    const saved: TableSession[] = JSON.parse(raw);
+    // merge: keep structure, restore carts
+    return defaultTables().map((t) => {
+      const found = saved.find((s) => s.id === t.id);
+      return found ? { ...t, cart: found.cart, openedAt: found.openedAt } : t;
+    });
+  } catch {
+    return defaultTables();
+  }
+}
+
+function saveTables(tables: TableSession[]) {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(SESSIONS_KEY, JSON.stringify(tables));
 }
 
 const methodLabel: Record<PaymentMethod, string> = {
@@ -27,8 +53,11 @@ const methodLabel: Record<PaymentMethod, string> = {
 
 export default function POSPage() {
   const [activeCategory, setActiveCategory] = useState('pizza');
-  const [tables, setTables] = useState<TableSession[]>(initTables);
-  const [activeTableId, setActiveTableId] = useState('takeout');
+  const [tables, setTables] = useState<TableSession[]>(loadTables);
+  const [activeTableId, setActiveTableId] = useState<string>(() => {
+    if (typeof window === 'undefined') return 'takeout-1';
+    return localStorage.getItem(ACTIVE_TABLE_KEY) || 'takeout-1';
+  });
   const [showPayment, setShowPayment] = useState(false);
   const [showReceipt, setShowReceipt] = useState(false);
   const [lastOrder, setLastOrder] = useState<Order | null>(null);
@@ -48,7 +77,21 @@ export default function POSPage() {
     return () => clearInterval(interval);
   }, []);
 
-  const activeTable = tables.find((t) => t.id === activeTableId)!;
+  // localStorage ga saqlash + state ni yangilash
+  const persistTables = (updater: (prev: TableSession[]) => TableSession[]) => {
+    setTables((prev) => {
+      const next = updater(prev);
+      saveTables(next);
+      return next;
+    });
+  };
+
+  const persistActiveTable = (id: string) => {
+    setActiveTableId(id);
+    if (typeof window !== 'undefined') localStorage.setItem(ACTIVE_TABLE_KEY, id);
+  };
+
+  const activeTable = tables.find((t) => t.id === activeTableId) ?? tables[0];
   const cart = activeTable.cart;
   const filteredItems = menuItems.filter((item) => item.category === activeCategory);
   const total = cart.reduce((sum, c) => sum + c.item.price * c.quantity, 0);
@@ -56,20 +99,19 @@ export default function POSPage() {
 
   const updateTableCart = useCallback(
     (tableId: string, updater: (cart: CartItem[]) => CartItem[]) => {
-      setTables((prev) =>
-        prev.map((t) =>
-          t.id === tableId
-            ? {
-                ...t,
-                cart: updater(t.cart),
-                openedAt: t.cart.length === 0 && updater(t.cart).length > 0
-                  ? new Date().toISOString()
-                  : t.openedAt,
-              }
-            : t
-        )
+      persistTables((prev) =>
+        prev.map((t) => {
+          if (t.id !== tableId) return t;
+          const newCart = updater(t.cart);
+          return {
+            ...t,
+            cart: newCart,
+            openedAt: !t.openedAt && newCart.length > 0 ? new Date().toISOString() : t.openedAt,
+          };
+        })
       );
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     []
   );
 
@@ -81,14 +123,6 @@ export default function POSPage() {
       }
       return [...prev, { item, quantity: 1 }];
     });
-    // Set openedAt on first item
-    setTables((prev) =>
-      prev.map((t) =>
-        t.id === activeTableId && t.cart.length === 0 && !t.openedAt
-          ? { ...t, openedAt: new Date().toISOString() }
-          : t
-      )
-    );
   };
 
   const changeQty = (itemId: string, delta: number) => {
@@ -100,10 +134,8 @@ export default function POSPage() {
   };
 
   const clearTable = (tableId: string) => {
-    setTables((prev) =>
-      prev.map((t) =>
-        t.id === tableId ? { ...t, cart: [], openedAt: undefined } : t
-      )
+    persistTables((prev) =>
+      prev.map((t) => (t.id === tableId ? { ...t, cart: [], openedAt: undefined } : t))
     );
   };
 
@@ -212,36 +244,38 @@ export default function POSPage() {
           {/* Tab header */}
           <div className="shrink-0 border-b border-gray-800 p-2 space-y-2">
 
-            {/* Takeout — katta, birinchi */}
-            {(() => {
-              const t = tables.find((x) => x.id === 'takeout')!;
-              const isActive = activeTableId === 'takeout';
-              const hasItems = t.cart.length > 0;
-              return (
-                <button
-                  onClick={() => setActiveTableId('takeout')}
-                  className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 font-bold transition-all ${
-                    isActive
-                      ? 'bg-blue-500 border-blue-400 text-white shadow-lg shadow-blue-500/30'
-                      : hasItems
-                      ? 'bg-blue-500/15 border-blue-500 text-blue-300'
-                      : 'bg-gray-800 border-gray-700 text-gray-300 hover:bg-gray-700 hover:border-blue-500/50'
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="text-2xl">🛍️</span>
-                    <span className="text-base">Takeout</span>
-                  </div>
-                  {hasItems ? (
-                    <span className={`text-sm font-bold ${isActive ? 'text-white' : 'text-blue-300'}`}>
-                      {tableItemCount(t)} ta · {formatPrice(tableTotal(t))}
-                    </span>
-                  ) : (
-                    <span className="text-xs text-gray-500">Bo&apos;sh</span>
-                  )}
-                </button>
-              );
-            })()}
+            {/* Takeout x3 — katta, birinchi */}
+            <div className="flex gap-1.5">
+              {tables
+                .filter((t) => t.type === 'takeout')
+                .map((t) => {
+                  const isActive = t.id === activeTableId;
+                  const hasItems = t.cart.length > 0;
+                  return (
+                    <button
+                      key={t.id}
+                      onClick={() => persistActiveTable(t.id)}
+                      className={`flex-1 flex flex-col items-center justify-center px-2 py-2.5 rounded-xl border-2 font-bold transition-all ${
+                        isActive
+                          ? 'bg-blue-500 border-blue-400 text-white shadow-lg shadow-blue-500/30'
+                          : hasItems
+                          ? 'bg-blue-500/15 border-blue-500 text-blue-300'
+                          : 'bg-gray-800 border-gray-700 text-gray-400 hover:bg-gray-700 hover:border-blue-500/50'
+                      }`}
+                    >
+                      <span className="text-xl">🛍️</span>
+                      <span className="text-xs font-bold">{t.name}</span>
+                      {hasItems ? (
+                        <span className={`text-[10px] font-bold mt-0.5 ${isActive ? 'text-white' : 'text-blue-300'}`}>
+                          {tableItemCount(t)} ta
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-gray-600">bo&apos;sh</span>
+                      )}
+                    </button>
+                  );
+                })}
+            </div>
 
             {/* Dine-in stollar — kichik qator */}
             <div className="flex gap-1.5 overflow-x-auto">
@@ -253,7 +287,7 @@ export default function POSPage() {
                   return (
                     <button
                       key={t.id}
-                      onClick={() => setActiveTableId(t.id)}
+                      onClick={() => persistActiveTable(t.id)}
                       className={`relative flex flex-col items-center justify-center px-3 py-2 rounded-xl transition-all shrink-0 min-w-[58px] border-2 ${
                         isActive
                           ? 'bg-amber-500 border-amber-400 text-gray-950'
@@ -368,7 +402,7 @@ export default function POSPage() {
             .map((t) => (
               <button
                 key={t.id}
-                onClick={() => setActiveTableId(t.id)}
+                onClick={() => persistActiveTable(t.id)}
                 className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium shrink-0 transition-colors ${
                   t.id === activeTableId
                     ? 'bg-amber-500 text-gray-950'
