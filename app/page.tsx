@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { categories, menuItems } from '@/lib/menu';
+import { categories, menuItems, fullItemName } from '@/lib/menu';
 import { CartItem, MenuItem, Order, PaymentMethod, TableSession } from '@/lib/types';
 import { saveOrder, formatPrice } from '@/lib/storage';
 import Link from 'next/link';
@@ -328,7 +328,7 @@ export default function POSPage() {
                     className="flex items-center gap-2 bg-gray-800 rounded-xl p-3"
                   >
                     <div className="flex-1 min-w-0">
-                      <div className="font-medium text-sm truncate">{cartItem.item.name}</div>
+                      <div className="font-medium text-sm leading-tight">{fullItemName(cartItem.item.category, cartItem.item.name)}</div>
                       <div className="text-amber-400 text-xs mt-0.5">
                         {formatPrice(cartItem.item.price)} × {cartItem.quantity} ={' '}
                         <span className="font-bold">
@@ -463,9 +463,9 @@ export default function POSPage() {
             </div>
             <div className="bg-gray-800 rounded-2xl p-4 mb-4 space-y-2 max-h-48 overflow-y-auto">
               {lastOrder.items.map((ci) => (
-                <div key={ci.item.id} className="flex justify-between text-sm">
-                  <span className="text-gray-300">
-                    {ci.item.name} × {ci.quantity}
+                <div key={ci.item.id} className="flex justify-between text-sm gap-2">
+                  <span className="text-gray-300 leading-tight">
+                    {fullItemName(ci.item.category, ci.item.name)} × {ci.quantity}
                   </span>
                   <span className="text-amber-400 font-medium">
                     {formatPrice(ci.item.price * ci.quantity)}
