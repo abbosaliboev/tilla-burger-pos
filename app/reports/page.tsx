@@ -137,6 +137,12 @@ export default function ReportsPage() {
             </p>
           </div>
         </div>
+        <Link
+          href="/reports/hourly"
+          className="px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded-xl text-sm transition-colors shrink-0"
+        >
+          ⏰ Soatlik tahlil
+        </Link>
       </header>
 
       <div className="flex flex-1 overflow-hidden">
